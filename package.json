@@ -1,0 +1,14 @@
+{
+  "name": "erp-nl",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev": "concurrently -n agent,web -c green,cyan \"npm run dev -w apps/agent\" \"npm run dev -w apps/web\"",
+    "build": "npm run build -w apps/agent && npm run build -w apps/web",
+    "db:up": "docker compose up -d",
+    "db:reset": "psql \"$DATABASE_URL\" -f db/schema.sql && psql \"$DATABASE_URL\" -f db/seed.sql"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  }
+}

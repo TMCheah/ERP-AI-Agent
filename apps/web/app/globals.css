@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body, #__next { height: 100%; }
+
+body {
+  @apply bg-ink-950 text-slate-200 antialiased;
+  font-feature-settings: "cv11", "ss01";
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2a3644; border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: #3a4a5c; }
+
+.card {
+  @apply rounded-lg border border-ink-700 bg-ink-900/60 backdrop-blur;
+}
+.btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition;
+}
+.btn-primary { @apply bg-brand-600 hover:bg-brand-500 text-white; }
+.btn-ghost   { @apply hover:bg-ink-800 text-slate-300; }
+.btn-danger  { @apply bg-red-600 hover:bg-red-500 text-white; }
+.input {
+  @apply w-full rounded-md border border-ink-600 bg-ink-900 px-3 py-2 text-sm
+         text-slate-100 placeholder-slate-500 outline-none
+         focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20;
+}
+.label { @apply mb-1 block text-xs font-medium uppercase tracking-wide text-slate-400; }
+
+/* Markdown-ish table rendering inside chat */
+.md table { @apply my-3 w-full border-collapse text-sm; }
+.md th   { @apply border-b border-ink-600 bg-ink-800/60 px-3 py-2 text-left font-semibold text-slate-300; }
+.md td   { @apply border-b border-ink-800 px-3 py-2 text-slate-200; }
+.md code { @apply rounded bg-ink-800 px-1.5 py-0.5 font-mono text-[12px] text-slate-200; }
+.md p    { @apply my-1.5 leading-relaxed; }
