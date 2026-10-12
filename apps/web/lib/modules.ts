@@ -1,5 +1,5 @@
 export type ModuleKey =
-  | "dashboard"
+  | "chat"
   | "finance"
   | "scm"
   | "inventory"
@@ -12,7 +12,7 @@ export type ModuleKey =
   | "settings";
 
 export const MODULES: { key: ModuleKey; label: string; icon: string; href: string }[] = [
-  { key: "dashboard",     label: "Dashboard",     icon: "▦", href: "/chat" },
+  { key: "chat",          label: "Chat",          icon: "💬", href: "/chat" },
   { key: "finance",       label: "Financials",    icon: "＄", href: "/chat?m=finance" },
   { key: "scm",           label: "Supply Chain",  icon: "⇄", href: "/chat?m=scm" },
   { key: "inventory",     label: "Inventory",     icon: "▣", href: "/chat?m=inventory" },

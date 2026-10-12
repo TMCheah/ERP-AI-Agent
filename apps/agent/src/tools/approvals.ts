@@ -1,7 +1,7 @@
 import { one, q } from "../db.js";
+import { executeApproval } from "../approval-executor.js";
 import { tool, type ToolCtx } from "./types.js";
 
-/** Insert a pending approval. Returns the approval row. */
 export async function createApproval(
   ctx: ToolCtx,
   kind: string,
@@ -21,20 +21,16 @@ export async function createApproval(
   return row;
 }
 
-export const approvalTools: ReturnType<typeof tool>[] = [
+export const approvalTools = [
   tool({
     name: "list_my_approvals",
     description:
-      "List approval requests visible to the current user. Use this when the user asks about pending approvals, things to approve, or the approval queue.",
+      "List approval requests visible to the current user. Use when the user asks about pending approvals or the approval queue.",
     parameters: {
       type: "object",
       properties: {
-        status: {
-          type: "string",
-          enum: ["PENDING", "APPROVED", "REJECTED", "ALL"],
-          description: "Filter by status. Defaults to PENDING.",
-        },
-        limit: { type: "integer", description: "Max rows, default 20." },
+        status: { type: "string", enum: ["PENDING", "APPROVED", "REJECTED", "ALL"] },
+        limit: { type: "integer" },
       },
       required: [],
     },
@@ -53,6 +49,77 @@ export const approvalTools: ReturnType<typeof tool>[] = [
         [ctx.tenantId, status, limit],
       );
       return { count: rows.length, approvals: rows };
+    },
+  }),
+
+  tool({
+    name: "approve_request",
+    description:
+      "Approve a pending approval by ID. Executes the underlying action immediately. Requires APPROVER or ADMIN role. Use when the user says 'approve PR #42' or similar.",
+    parameters: {
+      type: "object",
+      properties: {
+        approval_id: { type: "integer" },
+        note: { type: "string" },
+      },
+      required: ["approval_id"],
+    },
+    async handler(args: { approval_id: number; note?: string }, ctx) {
+      if (ctx.role === "STAFF") return { error: "Approver role required to approve." };
+      const row = await one<any>(
+        `SELECT * FROM approvals WHERE id=$1 AND tenant_id=$2`,
+        [args.approval_id, ctx.tenantId],
+      );
+      if (!row) return { error: `Approval #${args.approval_id} not found.` };
+      if (row.status !== "PENDING") return { error: `Approval #${args.approval_id} is already ${row.status}.` };
+
+      try {
+        await executeApproval(ctx, row.kind, row.payload, row.requested_by);
+      } catch (err: any) {
+        return { error: `Execution failed: ${err.message}` };
+      }
+      await q(
+        `UPDATE approvals SET status='APPROVED', decided_by=$1, decided_at=now(), decision_note=$2 WHERE id=$3`,
+        [ctx.userId, args.note ?? null, args.approval_id],
+      );
+      await q(
+        `INSERT INTO audit_log (tenant_id, user_id, action, detail) VALUES ($1,$2,'approval.approved',$3)`,
+        [ctx.tenantId, ctx.userId, { id: args.approval_id, kind: row.kind }],
+      );
+      return { status: "APPROVED", approval_id: args.approval_id, kind: row.kind };
+    },
+  }),
+
+  tool({
+    name: "reject_request",
+    description:
+      "Reject a pending approval by ID with an optional note. Requires APPROVER or ADMIN role.",
+    parameters: {
+      type: "object",
+      properties: {
+        approval_id: { type: "integer" },
+        note: { type: "string" },
+      },
+      required: ["approval_id"],
+    },
+    async handler(args: { approval_id: number; note?: string }, ctx) {
+      if (ctx.role === "STAFF") return { error: "Approver role required to reject." };
+      const row = await one<any>(
+        `SELECT * FROM approvals WHERE id=$1 AND tenant_id=$2`,
+        [args.approval_id, ctx.tenantId],
+      );
+      if (!row) return { error: `Approval #${args.approval_id} not found.` };
+      if (row.status !== "PENDING") return { error: `Approval #${args.approval_id} is already ${row.status}.` };
+
+      await q(
+        `UPDATE approvals SET status='REJECTED', decided_by=$1, decided_at=now(), decision_note=$2 WHERE id=$3`,
+        [ctx.userId, args.note ?? null, args.approval_id],
+      );
+      await q(
+        `INSERT INTO audit_log (tenant_id, user_id, action, detail) VALUES ($1,$2,'approval.rejected',$3)`,
+        [ctx.tenantId, ctx.userId, { id: args.approval_id, kind: row.kind }],
+      );
+      return { status: "REJECTED", approval_id: args.approval_id, kind: row.kind };
     },
   }),
 ];

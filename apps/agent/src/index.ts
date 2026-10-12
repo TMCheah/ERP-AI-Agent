@@ -1,15 +1,36 @@
 import cors from "cors";
 import express from "express";
+import rateLimit from "express-rate-limit";
 import { pool, q } from "./db.js";
 import { env } from "./env.js";
 import { runAgent, type AgentEvent } from "./agent.js";
-import { createApproval } from "./tools/approvals.js";
+import { executeApproval } from "./approval-executor.js";
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 
-// ---------- helpers ----------
+// ---------- Rate limiting ----------
+// 60 chat requests per 5 min per user (default for POST /chat and /approvals/:id)
+const chatLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 60,
+  keyGenerator: (req) => req.header("x-user-id") ?? "anon",
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please slow down." },
+});
+
+// 200 reads per minute per user
+const readLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 200,
+  keyGenerator: (req) => req.header("x-user-id") ?? "anon",
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many reads. Please slow down." },
+});
+
 type Ctx = { tenantId: string; userId: string; role: "ADMIN" | "APPROVER" | "STAFF" };
 
 function ctxFromHeaders(req: express.Request): Ctx | null {
@@ -22,12 +43,44 @@ function ctxFromHeaders(req: express.Request): Ctx | null {
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
-// ---------- chat (SSE) ----------
-app.post("/chat", async (req, res) => {
+// ---------- Conversations ----------
+app.get("/conversations", readLimiter, async (req, res) => {
+  const ctx = ctxFromHeaders(req);
+  if (!ctx) return res.status(400).json({ error: "Missing user context" });
+  const rows = await q(
+    `SELECT id, title, updated_at FROM conversations WHERE user_id=$1 ORDER BY updated_at DESC LIMIT 50`,
+    [ctx.userId],
+  );
+  res.json({ conversations: rows });
+});
+
+app.post("/conversations", async (req, res) => {
+  const ctx = ctxFromHeaders(req);
+  if (!ctx) return res.status(400).json({ error: "Missing user context" });
+  const title = (req.body?.title as string) || "New chat";
+  const row = (await q<any>(
+    `INSERT INTO conversations (tenant_id, user_id, title) VALUES ($1,$2,$3) RETURNING id, title, created_at`,
+    [ctx.tenantId, ctx.userId, title],
+  ))[0];
+  res.json({ conversation: row });
+});
+
+app.get("/conversations/:id/messages", readLimiter, async (req, res) => {
+  const ctx = ctxFromHeaders(req);
+  if (!ctx) return res.status(400).json({ error: "Missing user context" });
+  const rows = await q(
+    `SELECT role, content, created_at FROM chat_messages
+      WHERE conversation_id=$1 AND user_id=$2 ORDER BY created_at ASC LIMIT 500`,
+    [Number(req.params.id), ctx.userId],
+  );
+  res.json({ messages: rows });
+});
+
+// ---------- Chat ----------
+app.post("/chat", chatLimiter, async (req, res) => {
   const ctx = ctxFromHeaders(req);
   if (!ctx) return res.status(400).json({ error: "Missing user context headers" });
-
-  const { message } = req.body as { message: string };
+  const { message, conversation_id } = req.body as { message: string; conversation_id?: number };
   if (!message?.trim()) return res.status(400).json({ error: "message required" });
 
   res.setHeader("Content-Type", "text/event-stream");
@@ -38,29 +91,40 @@ app.post("/chat", async (req, res) => {
   const send = (e: AgentEvent) => res.write(`data: ${JSON.stringify(e)}\n\n`);
 
   try {
-    // Verify the user still exists (catches stale JWTs cleanly)
-    const user = await q(
-      `SELECT id FROM users WHERE id = $1 AND tenant_id = $2`,
-      [ctx.userId, ctx.tenantId],
-    );
+    const user = await q(`SELECT id FROM users WHERE id=$1 AND tenant_id=$2`, [ctx.userId, ctx.tenantId]);
     if (user.length === 0) {
-      send({
-        type: "error",
-        text: "Your session is stale (the user no longer exists). Please sign out and sign in again.",
-      });
+      send({ type: "error", text: "Your session is stale. Please sign out and in." });
       send({ type: "done" });
-      res.end();
-      return;
+      return res.end();
+    }
+
+    let convId = conversation_id;
+    if (!convId) {
+      const existing = await q<any>(
+        `SELECT id FROM conversations WHERE user_id=$1 ORDER BY updated_at DESC LIMIT 1`,
+        [ctx.userId],
+      );
+      if (existing.length) convId = existing[0].id;
+      else {
+        const created = await q<any>(
+          `INSERT INTO conversations (tenant_id, user_id, title) VALUES ($1,$2,$3) RETURNING id`,
+          [ctx.tenantId, ctx.userId, message.slice(0, 60)],
+        );
+        convId = created[0].id;
+      }
     }
 
     await q(
-      `INSERT INTO chat_messages (tenant_id, user_id, role, content) VALUES ($1,$2,'user',$3)`,
-      [ctx.tenantId, ctx.userId, message],
+      `INSERT INTO chat_messages (tenant_id, user_id, conversation_id, role, content)
+       VALUES ($1,$2,$3,'user',$4)`,
+      [ctx.tenantId, ctx.userId, convId, message],
     );
+    await q(`UPDATE conversations SET updated_at=now() WHERE id=$1`, [convId]);
+
     const history = await q<{ role: "user" | "assistant"; content: string }>(
       `SELECT role, content FROM chat_messages
-        WHERE user_id = $1 ORDER BY created_at DESC LIMIT 12`,
-      [ctx.userId],
+        WHERE user_id=$1 AND conversation_id=$2 ORDER BY created_at DESC LIMIT 12`,
+      [ctx.userId, convId],
     );
     history.reverse();
     history.pop();
@@ -70,11 +134,11 @@ app.post("/chat", async (req, res) => {
       if (evt.type === "message") assistantText += evt.text;
       send(evt);
     }
-
     if (assistantText) {
       await q(
-        `INSERT INTO chat_messages (tenant_id, user_id, role, content) VALUES ($1,$2,'assistant',$3)`,
-        [ctx.tenantId, ctx.userId, assistantText],
+        `INSERT INTO chat_messages (tenant_id, user_id, conversation_id, role, content)
+         VALUES ($1,$2,$3,'assistant',$4)`,
+        [ctx.tenantId, ctx.userId, convId, assistantText],
       );
     }
   } catch (err: any) {
@@ -82,12 +146,11 @@ app.post("/chat", async (req, res) => {
     send({ type: "error", text: err.message ?? "Internal error" });
     send({ type: "done" });
   }
-
   res.end();
 });
 
-// ---------- approvals ----------
-app.get("/approvals", async (req, res) => {
+// ---------- Approvals ----------
+app.get("/approvals", readLimiter, async (req, res) => {
   const ctx = ctxFromHeaders(req);
   if (!ctx) return res.status(400).json({ error: "Missing user context headers" });
   try {
@@ -111,7 +174,7 @@ app.get("/approvals", async (req, res) => {
   }
 });
 
-app.post("/approvals/:id", async (req, res) => {
+app.post("/approvals/:id", chatLimiter, async (req, res) => {
   const ctx = ctxFromHeaders(req);
   if (!ctx) return res.status(400).json({ error: "Missing user context headers" });
   if (ctx.role === "STAFF") return res.status(403).json({ error: "Approver role required" });
@@ -121,10 +184,7 @@ app.post("/approvals/:id", async (req, res) => {
   if (decision !== "APPROVED" && decision !== "REJECTED")
     return res.status(400).json({ error: "decision must be APPROVED or REJECTED" });
 
-  const row = await q<any>(
-    `SELECT * FROM approvals WHERE id=$1 AND tenant_id=$2`,
-    [id, ctx.tenantId],
-  ).then((r) => r[0]);
+  const row = (await q<any>(`SELECT * FROM approvals WHERE id=$1 AND tenant_id=$2`, [id, ctx.tenantId]))[0];
   if (!row) return res.status(404).json({ error: "Not found" });
   if (row.status !== "PENDING") return res.status(409).json({ error: "Already decided" });
 
@@ -137,101 +197,18 @@ app.post("/approvals/:id", async (req, res) => {
   }
 
   await q(
-    `UPDATE approvals SET status=$1, decided_by=$2, decided_at=now(), decision_note=$3
-      WHERE id=$4`,
+    `UPDATE approvals SET status=$1, decided_by=$2, decided_at=now(), decision_note=$3 WHERE id=$4`,
     [decision, ctx.userId, note ?? null, id],
   );
   await q(
     `INSERT INTO audit_log (tenant_id, user_id, action, detail) VALUES ($1,$2,$3,$4)`,
     [ctx.tenantId, ctx.userId, `approval.${decision.toLowerCase()}`, { id, kind: row.kind }],
   );
-
   res.json({ ok: true });
 });
 
-// ---------- approval execution ----------
-async function executeApproval(
-  ctx: Ctx,
-  kind: string,
-  payload: any,
-  requestedBy: string,
-) {
-  if (kind === "purchase_requisition") {
-    const { sku, quantity, required_by, notes } = payload;
-    const item = (
-      await q<any>(`SELECT id FROM items WHERE tenant_id=$1 AND sku=$2`, [ctx.tenantId, sku])
-    )[0];
-    if (!item) throw new Error(`Unknown SKU: ${sku}`);
-    const ref = `PR-${Date.now().toString().slice(-8)}`;
-    await q(
-      `INSERT INTO purchase_requisitions
-        (tenant_id, reference, item_id, quantity, required_by, requested_by, notes, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'APPROVED')`,
-      [ctx.tenantId, ref, item.id, quantity, required_by ?? null, requestedBy, notes ?? null],
-    );
-    return;
-  }
-
-  if (kind === "stock_adjustment") {
-    const { sku, warehouse_code, delta, reason } = payload;
-    const row = (
-      await q<any>(
-        `SELECT i.id AS item_id, w.id AS warehouse_id
-           FROM items i, warehouses w
-          WHERE i.tenant_id=$1 AND i.sku=$2 AND w.tenant_id=$1 AND w.code=$3`,
-        [ctx.tenantId, sku, warehouse_code],
-      )
-    )[0];
-    if (!row) throw new Error(`Unknown SKU or warehouse (${sku}, ${warehouse_code})`);
-    await q(
-      `INSERT INTO stock (tenant_id, item_id, warehouse_id, quantity)
-       VALUES ($1,$2,$3,$4)
-       ON CONFLICT (item_id, warehouse_id)
-       DO UPDATE SET quantity = stock.quantity + EXCLUDED.quantity`,
-      [ctx.tenantId, row.item_id, row.warehouse_id, delta],
-    );
-    await q(
-      `INSERT INTO audit_log (tenant_id, user_id, action, detail) VALUES ($1,$2,'stock.adjusted',$3)`,
-      [ctx.tenantId, requestedBy, { sku, warehouse_code, delta, reason }],
-    );
-    return;
-  }
-
-  if (kind === "journal_entry") {
-    const { debit_account, credit_account, amount, memo } = payload;
-    const ref = `JE-${Date.now().toString().slice(-8)}`;
-    await q(
-      `INSERT INTO journal_entries
-        (tenant_id, reference, memo, debit_account, credit_account, amount, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [ctx.tenantId, ref, memo ?? null, debit_account, credit_account, amount, requestedBy],
-    );
-    return;
-  }
-
-  if (kind === "leave_request") {
-    const { employee_email, from_date, to_date, reason } = payload;
-    const emp = (
-      await q<any>(`SELECT id FROM employees WHERE tenant_id=$1 AND email=$2`, [
-        ctx.tenantId,
-        employee_email,
-      ])
-    )[0];
-    if (!emp) throw new Error(`Unknown employee: ${employee_email}`);
-    await q(
-      `INSERT INTO leave_requests
-        (tenant_id, employee_id, from_date, to_date, reason, status)
-       VALUES ($1,$2,$3,$4,$5,'APPROVED')`,
-      [ctx.tenantId, emp.id, from_date, to_date, reason ?? null],
-    );
-    return;
-  }
-
-  throw new Error(`No executor for approval kind: ${kind}`);
-}
-
-// ---------- settings (ADMIN only) ----------
-app.get("/settings", async (req, res) => {
+// ---------- Settings ----------
+app.get("/settings", readLimiter, async (req, res) => {
   const ctx = ctxFromHeaders(req);
   if (!ctx) return res.status(400).json({ error: "Missing user context headers" });
   const rows = await q(
@@ -262,27 +239,12 @@ app.put("/settings", async (req, res) => {
   res.json({ ok: true });
 });
 
-// ---------- history ----------
-app.get("/history", async (req, res) => {
-  const ctx = ctxFromHeaders(req);
-  if (!ctx) return res.status(400).json({ error: "Missing user context headers" });
-  const rows = await q(
-    `SELECT role, content, created_at FROM chat_messages
-      WHERE user_id=$1 ORDER BY created_at ASC LIMIT 200`,
-    [ctx.userId],
-  );
-  res.json({ messages: rows });
-});
+// ---------- Safety nets ----------
+process.on("unhandledRejection", (err) => console.error("[agent] unhandledRejection:", err));
+process.on("uncaughtException", (err) => console.error("[agent] uncaughtException:", err));
 
 const server = app.listen(env.PORT, () => {
   console.log(`[agent] listening on http://localhost:${env.PORT}`);
-});
-
-process.on("unhandledRejection", (err) => {
-  console.error("[agent] unhandledRejection:", err);
-});
-process.on("uncaughtException", (err) => {
-  console.error("[agent] uncaughtException:", err);
 });
 
 process.on("SIGINT", async () => {

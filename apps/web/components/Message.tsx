@@ -8,17 +8,13 @@ function renderMarkdown(src: string): string {
   const lines = src.split("\n");
   const out: string[] = [];
   let i = 0;
-
   const inline = (s: string) =>
-    s
-      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
       .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
       .replace(/`([^`]+)`/g, "<code>$1</code>");
 
   while (i < lines.length) {
     const line = lines[i];
-
-    // Table block
     if (line.trim().startsWith("|") && lines[i + 1]?.trim().match(/^\|[\s\-:|]+\|$/)) {
       const header = line.split("|").slice(1, -1).map((c) => c.trim());
       i += 2;
@@ -38,7 +34,6 @@ function renderMarkdown(src: string): string {
       out.push("</tbody></table>");
       continue;
     }
-
     if (line.trim() === "") { i++; continue; }
     out.push(`<p>${inline(line)}</p>`);
     i++;
@@ -48,7 +43,7 @@ function renderMarkdown(src: string): string {
 
 export type ChatItem =
   | { id: string; kind: "user"; text: string }
-  | { id: string; kind: "assistant"; text: string }
+  | { id: string; kind: "assistant"; text: string; streaming?: boolean }
   | { id: string; kind: "thinking"; lines: string[] }
   | { id: string; kind: "tool"; name: string; args?: any; result?: any; done: boolean }
   | { id: string; kind: "error"; text: string };
@@ -68,10 +63,12 @@ export default function Message({ item }: { item: ChatItem }) {
     return (
       <div className="flex gap-3">
         <Avatar />
-        <div
-          className="md max-w-[85%] rounded-2xl rounded-bl-md border border-ink-700 bg-ink-900 px-4 py-2.5 text-sm text-slate-200"
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(item.text) }}
-        />
+        <div className="md max-w-[85%] rounded-2xl rounded-bl-md border border-ink-700 bg-ink-900 px-4 py-2.5 text-sm text-slate-200">
+          <div dangerouslySetInnerHTML={{ __html: renderMarkdown(item.text || " ") }} />
+          {item.streaming && (
+            <span className="ml-0.5 inline-block h-3 w-1.5 animate-pulse bg-brand-500 align-middle" />
+          )}
+        </div>
       </div>
     );
   }
@@ -80,7 +77,7 @@ export default function Message({ item }: { item: ChatItem }) {
     return (
       <div className="flex gap-3">
         <Avatar />
-        <details className="max-w-[85%] rounded-lg border border-ink-800 bg-ink-900/40 px-3 py-2 text-xs text-slate-400">
+        <details className="max-w-[85%] rounded-lg border border-ink-800 bg-ink-900/40 px-3 py-2 text-xs text-slate-400" open>
           <summary className="cursor-pointer select-none">Reasoning ({item.lines.length})</summary>
           <ul className="mt-2 space-y-0.5">
             {item.lines.map((l, idx) => (
@@ -109,9 +106,7 @@ export default function Message({ item }: { item: ChatItem }) {
           )}
           {item.done && item.result && (
             <details className="mt-1.5">
-              <summary className="cursor-pointer text-[11px] text-slate-500 hover:text-slate-300">
-                Result
-              </summary>
+              <summary className="cursor-pointer text-[11px] text-slate-500 hover:text-slate-300">Result</summary>
               <pre className="mt-1 max-h-64 overflow-auto rounded bg-ink-950 p-2 text-[11px] text-slate-400">
                 {JSON.stringify(item.result, null, 2)}
               </pre>

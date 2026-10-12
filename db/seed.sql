@@ -62,3 +62,41 @@ INSERT INTO employees (tenant_id, employee_no, full_name, email, department, job
 INSERT INTO leads (tenant_id, name, company, email, stage, value) VALUES
   ('11111111-1111-1111-1111-111111111111','Rina Tan','Nova Retail','rina@nova.test','QUALIFIED', 25000),
   ('11111111-1111-1111-1111-111111111111','Kevin Lim','Delta Logistics','kevin@delta.test','PROPOSAL', 48000);
+
+INSERT INTO customers (tenant_id, code, name, email) VALUES
+  ('11111111-1111-1111-1111-111111111111','C-001','Globex Corp','ap@globex.test'),
+  ('11111111-1111-1111-1111-111111111111','C-002','Initech','billing@initech.test'),
+  ('11111111-1111-1111-1111-111111111111','C-003','Umbrella Ltd','ar@umbrella.test');
+
+INSERT INTO projects (tenant_id, code, name, status, budget, start_date) VALUES
+  ('11111111-1111-1111-1111-111111111111','PRJ-001','Q4 Website Rebuild','ACTIVE', 50000, CURRENT_DATE),
+  ('11111111-1111-1111-1111-111111111111','PRJ-002','ERP Rollout','ACTIVE', 120000, CURRENT_DATE);
+
+INSERT INTO tickets (tenant_id, reference, subject, description, priority, status) VALUES
+  ('11111111-1111-1111-1111-111111111111','T-1001','Login not working','Cannot sign in with SSO','HIGH','OPEN'),
+  ('11111111-1111-1111-1111-111111111111','T-1002','Invoice mismatch','PO says 100 units, invoice says 120','NORMAL','OPEN');
+
+INSERT INTO boms (tenant_id, product_id, version, name)
+SELECT '11111111-1111-1111-1111-111111111111', id, 'v1', 'Pen Assembly Kit'
+FROM items WHERE sku='SKU-1001' AND tenant_id='11111111-1111-1111-1111-111111111111';
+
+-- add a demo conversation
+INSERT INTO conversations (tenant_id, user_id, title)
+SELECT '11111111-1111-1111-1111-111111111111', id, 'Welcome'
+FROM users WHERE email='admin@magent.test';
+
+-- ============ Seed FX rates (USD base) ============
+INSERT INTO fx_rates (tenant_id, base_currency, quote_currency, rate, effective_date)
+VALUES
+  ('11111111-1111-1111-1111-111111111111','USD','MYR', 4.70, CURRENT_DATE),
+  ('11111111-1111-1111-1111-111111111111','USD','SGD', 1.35, CURRENT_DATE),
+  ('11111111-1111-1111-1111-111111111111','USD','EUR', 0.92, CURRENT_DATE),
+  ('11111111-1111-1111-1111-111111111111','USD','GBP', 0.79, CURRENT_DATE)
+ON CONFLICT DO NOTHING;
+
+-- ============ Seed a fixed asset ============
+INSERT INTO fixed_assets (tenant_id, code, name, category, purchase_date, cost, salvage_value, useful_life_months)
+VALUES
+  ('11111111-1111-1111-1111-111111111111','FA-001','Delivery Van','Vehicle', CURRENT_DATE - 180, 45000, 5000, 60),
+  ('11111111-1111-1111-1111-111111111111','FA-002','Office Servers','IT', CURRENT_DATE - 400, 12000, 0, 36)
+ON CONFLICT DO NOTHING;

@@ -6,7 +6,7 @@ function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") ?? "/chat";
-  const [email, setEmail] = useState("admin@acme.test");
+  const [email, setEmail] = useState("admin@magent.test");
   const [password, setPassword] = useState("password123");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -38,7 +38,7 @@ function LoginForm() {
             E
           </div>
           <h1 className="text-xl font-semibold text-slate-100">
-            {process.env.NEXT_PUBLIC_APP_NAME ?? "Acme ERP"}
+            {process.env.NEXT_PUBLIC_APP_NAME ?? "Magent ERP"}
           </h1>
           <p className="mt-1 text-sm text-slate-400">Sign in to continue</p>
         </div>
@@ -73,7 +73,7 @@ function LoginForm() {
             {loading ? "Signing in…" : "Sign in"}
           </button>
           <p className="mt-4 text-center text-xs text-slate-500">
-            Demo: admin@acme.test / password123
+            Demo: admin@magent.test / password123
           </p>
         </form>
       </div>

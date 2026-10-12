@@ -14,16 +14,18 @@ export default function Sidebar({ session }: { session: Session }) {
     router.refresh();
   }
 
+  const chat = MODULES.find((m) => m.key === "chat")!;
+  const modules = MODULES.filter((m) => m.key !== "chat" && m.key !== "settings");
+  const settings = MODULES.find((m) => m.key === "settings")!;
+
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-ink-800 px-4 py-4">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">
-            E
-          </div>
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">E</div>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-slate-100">
-              {process.env.NEXT_PUBLIC_APP_NAME ?? "Acme ERP"}
+              {process.env.NEXT_PUBLIC_APP_NAME ?? "Magent ERP"}
             </p>
             <p className="truncate text-[11px] text-slate-500">Natural-language</p>
           </div>
@@ -31,10 +33,27 @@ export default function Sidebar({ session }: { session: Session }) {
       </div>
 
       <nav className="flex-1 overflow-y-auto p-2">
-        {MODULES.map((m) => {
-          const isActive = pathname.startsWith(m.href.split("?")[0]);
-          const hideForStaff = m.key === "settings" && session.role !== "ADMIN";
-          if (hideForStaff) return null;
+        <Link
+          href={chat.href}
+          className={
+            "mb-1 flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition " +
+            (pathname === "/chat" && !new URLSearchParams(typeof window !== "undefined" ? window.location.search : "").get("m")
+              ? "bg-brand-600/20 text-brand-500"
+              : "text-slate-200 hover:bg-ink-800")
+          }
+        >
+          <span className="w-4 text-center text-base leading-none">💬</span>
+          <span>Chat</span>
+        </Link>
+
+        <div className="my-2 border-t border-ink-800" />
+
+        <p className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
+          Modules
+        </p>
+        {modules.map((m) => {
+          const isActive = pathname === "/chat" && typeof window !== "undefined"
+            && new URLSearchParams(window.location.search).get("m") === m.key;
           return (
             <Link
               key={m.key}
@@ -54,6 +73,20 @@ export default function Sidebar({ session }: { session: Session }) {
       </nav>
 
       <div className="border-t border-ink-800 p-3">
+        {session.role === "ADMIN" && (
+          <Link
+            href={settings.href}
+            className={
+              "mb-1 flex items-center gap-3 rounded-md px-3 py-2 text-sm transition " +
+              (pathname.startsWith("/settings")
+                ? "bg-brand-600/15 text-brand-500"
+                : "text-slate-400 hover:bg-ink-800 hover:text-slate-200")
+            }
+          >
+            <span className="w-4 text-center text-base leading-none">⚙</span>
+            <span>Settings</span>
+          </Link>
+        )}
         <div className="mb-2 flex items-center gap-2.5 rounded-md px-2 py-1.5">
           <div className="flex h-7 w-7 items-center justify-center rounded-full bg-ink-700 text-xs font-semibold text-slate-300">
             {session.name.slice(0, 1).toUpperCase()}
