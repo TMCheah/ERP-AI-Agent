@@ -669,7 +669,3 @@ erp-nl/
 ```
 
 ---
-
-## License
-
-Private / unlicensed. Do whatever you want with it.
