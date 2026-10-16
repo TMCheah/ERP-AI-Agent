@@ -15,7 +15,11 @@ export default function Sidebar({ session }: { session: Session }) {
   }
 
   const chat = MODULES.find((m) => m.key === "chat")!;
-  const modules = MODULES.filter((m) => m.key !== "chat" && m.key !== "settings");
+  const drafts = MODULES.find((m) => m.key === "drafts")!;
+  const modules = MODULES.filter(
+    (m) => !["chat", "settings", "approvals", "drafts"].includes(m.key),
+  );
+  const approvals = MODULES.find((m) => m.key === "approvals")!;
   const settings = MODULES.find((m) => m.key === "settings")!;
 
   return (
@@ -25,7 +29,7 @@ export default function Sidebar({ session }: { session: Session }) {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">E</div>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-slate-100">
-              {process.env.NEXT_PUBLIC_APP_NAME ?? "Magent ERP"}
+              {process.env.NEXT_PUBLIC_APP_NAME ?? "Acme ERP"}
             </p>
             <p className="truncate text-[11px] text-slate-500">Natural-language</p>
           </div>
@@ -36,8 +40,8 @@ export default function Sidebar({ session }: { session: Session }) {
         <Link
           href={chat.href}
           className={
-            "mb-1 flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition " +
-            (pathname === "/chat" && !new URLSearchParams(typeof window !== "undefined" ? window.location.search : "").get("m")
+            "mb-0.5 flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition " +
+            (pathname === "/chat"
               ? "bg-brand-600/20 text-brand-500"
               : "text-slate-200 hover:bg-ink-800")
           }
@@ -46,14 +50,26 @@ export default function Sidebar({ session }: { session: Session }) {
           <span>Chat</span>
         </Link>
 
+        <Link
+          href={drafts.href}
+          className={
+            "mb-1 flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition " +
+            (pathname === "/drafts"
+              ? "bg-brand-600/20 text-brand-500"
+              : "text-slate-200 hover:bg-ink-800")
+          }
+        >
+          <span className="w-4 text-center text-base leading-none">📝</span>
+          <span>Drafts</span>
+        </Link>
+
         <div className="my-2 border-t border-ink-800" />
 
         <p className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
           Modules
         </p>
         {modules.map((m) => {
-          const isActive = pathname === "/chat" && typeof window !== "undefined"
-            && new URLSearchParams(window.location.search).get("m") === m.key;
+          const isActive = pathname === m.href;
           return (
             <Link
               key={m.key}
@@ -70,6 +86,20 @@ export default function Sidebar({ session }: { session: Session }) {
             </Link>
           );
         })}
+
+        <div className="my-2 border-t border-ink-800" />
+        <Link
+          href={approvals.href}
+          className={
+            "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition " +
+            (pathname === approvals.href
+              ? "bg-brand-600/15 text-brand-500"
+              : "text-slate-400 hover:bg-ink-800 hover:text-slate-200")
+          }
+        >
+          <span className="w-4 text-center text-base leading-none">{approvals.icon}</span>
+          <span className="truncate">{approvals.label}</span>
+        </Link>
       </nav>
 
       <div className="border-t border-ink-800 p-3">

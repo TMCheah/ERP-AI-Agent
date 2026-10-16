@@ -1,6 +1,7 @@
 import { q } from "../db.js";
 import { createApproval } from "./approvals.js";
 import { tool } from "./types.js";
+import { cascadeFromWorkOrder } from "../approval-executor.js";
 
 export const manufacturingTools = [
   tool({
@@ -242,11 +243,39 @@ export const manufacturingTools = [
         [ctx.tenantId, ctx.userId, { reference: args.reference, warehouse: args.warehouse_code }],
       );
 
+      // ---------- Cascade: DRAFT production JE ----------
+      let producedValue = 0;
+      if (bom?.product_id) {
+        // value = sum(component_qty × wo_qty × component.cost_price)
+        const comps = await q<any>(
+          `SELECT bl.quantity, i.cost_price
+             FROM bom_lines bl JOIN items i ON i.id = bl.component_id
+            WHERE bl.bom_id = $1`,
+          [wo.bom_id],
+        );
+        for (const c of comps) {
+          producedValue +=
+            Number(c.quantity) * Number(wo.quantity) * Number(c.cost_price ?? 0);
+        }
+      }
+      let cascade: any = { je_reference: null };
+      try {
+        cascade = await cascadeFromWorkOrder(ctx, {
+          tenantId: ctx.tenantId,
+          woReference: args.reference,
+          producedValue,
+          requestedBy: ctx.userId,
+        });
+      } catch (err) {
+        console.error("[wo] cascade failed:", err);
+      }
+
       return {
         status: "COMPLETED",
         reference: args.reference,
         warehouse: args.warehouse_code,
         produced: wo.quantity,
+        cascade,
       };
     },
   }),

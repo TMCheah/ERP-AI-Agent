@@ -5,6 +5,8 @@ import { pool, q } from "./db.js";
 import { env } from "./env.js";
 import { runAgent, type AgentEvent } from "./agent.js";
 import { executeApproval } from "./approval-executor.js";
+import { getModuleCards } from "./modules.js";
+import { listAllDrafts } from "./drafts.js";
 
 const app = express();
 app.use(cors());
@@ -149,6 +151,18 @@ app.post("/chat", chatLimiter, async (req, res) => {
   res.end();
 });
 
+app.get("/drafts", readLimiter, async (req, res) => {
+  const ctx = ctxFromHeaders(req);
+  if (!ctx) return res.status(400).json({ error: "Missing user context headers" });
+  try {
+    const rows = await listAllDrafts(ctx);
+    res.json({ count: rows.length, rows });
+  } catch (err: any) {
+    console.error("[agent] /drafts error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---------- Approvals ----------
 app.get("/approvals", readLimiter, async (req, res) => {
   const ctx = ctxFromHeaders(req);
@@ -237,6 +251,23 @@ app.put("/settings", async (req, res) => {
     [ctx.tenantId, provider, base_url, model, api_key ?? null, temperature ?? 0.1],
   );
   res.json({ ok: true });
+});
+
+app.get("/modules/:key/list", readLimiter, async (req, res) => {
+  const ctx = ctxFromHeaders(req);
+  if (!ctx) return res.status(400).json({ error: "Missing user context headers" });
+  const key = req.params.key;
+  const bucket = (req.query.bucket as string) || "all";
+  if (!["pending", "complete", "all"].includes(bucket)) {
+    return res.status(400).json({ error: "bucket must be pending | complete | all" });
+  }
+  try {
+    const rows = await getModuleCards(key, ctx, bucket as any);
+    res.json({ module: key, bucket, count: rows.length, rows });
+  } catch (err: any) {
+    console.error("[agent] /modules error:", err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ---------- Safety nets ----------

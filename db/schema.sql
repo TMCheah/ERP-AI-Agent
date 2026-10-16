@@ -518,6 +518,18 @@ CREATE TABLE IF NOT EXISTS goods_return_lines (
   quantity NUMERIC(14,2) NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS calendar_events (
+  id BIGSERIAL PRIMARY KEY,
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  employee_id BIGINT REFERENCES employees(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'LEAVE',
+  source_ref TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 ALTER TABLE chat_messages ADD COLUMN conversation_id BIGINT REFERENCES conversations(id) ON DELETE CASCADE;
 ALTER TABLE employees ADD COLUMN user_id UUID REFERENCES users(id) ON DELETE SET NULL;
@@ -529,6 +541,17 @@ ALTER TABLE customers  ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 ALTER TABLE items      ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS grn_id BIGINT REFERENCES goods_receipts(id);
 ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS return_id BIGINT REFERENCES goods_returns(id);
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'AR';   -- AR | AP
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vendor_id BIGINT REFERENCES vendors(id);
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS customer_id BIGINT REFERENCES customers(id);
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS source TEXT;      -- MANUAL | PO_RECEIPT | WORK_ORDER
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS source_ref TEXT;  -- GRN-XXXX / PO-XXXX / etc.
+ALTER TABLE invoices ALTER COLUMN customer DROP NOT NULL;       -- AP invoices have no customer
+ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'POSTED';  -- DRAFT | POSTED
+ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS source TEXT;      -- AR_INVOICE | GRN | WORK_ORDER
+ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS source_ref TEXT;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS default_vendor_id BIGINT REFERENCES vendors(id);
 
 CREATE INDEX idx_items_tenant ON items(tenant_id);
 CREATE INDEX idx_stock_item ON stock(item_id);
@@ -540,3 +563,7 @@ CREATE INDEX IF NOT EXISTS idx_items_barcode ON items(tenant_id, barcode);
 CREATE INDEX IF NOT EXISTS idx_grn_tenant ON goods_receipts(tenant_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_grn_po ON goods_receipts(po_id);
 CREATE INDEX IF NOT EXISTS idx_returns_tenant ON goods_returns(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_invoices_type_status ON invoices(tenant_id, type, status);
+CREATE INDEX IF NOT EXISTS idx_invoices_source ON invoices(tenant_id, source, source_ref);
+CREATE INDEX IF NOT EXISTS idx_je_status ON journal_entries(tenant_id, status);
+CREATE INDEX IF NOT EXISTS idx_calendar_tenant_dates ON calendar_events(tenant_id, start_date, end_date);

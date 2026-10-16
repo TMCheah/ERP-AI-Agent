@@ -2,16 +2,17 @@ import { q } from "../db.js";
 import { createApproval } from "./approvals.js";
 import { tool } from "./types.js";
 import { ref } from "./helpers.js";
+import { cascadeFromGRN } from "../approval-executor.js";
 
 export const goodsReceiptTools = [
   tool({
     name: "receive_purchase_order",
     description:
-      "Receive a purchase order partially or in full. Creates a GRN (goods receipt note) document. Pass lines with received_qty per SKU; any SKU not listed receives nothing. Adds stock at the warehouse, increments line.received_qty, records stock movements linked to the GRN, and updates PO status to PARTIALLY_RECEIVED or RECEIVED.",
+      "Receive a purchase order partially or in full. Creates a GRN. Also auto-creates a DRAFT AP invoice (vendor bill) and a DRAFT journal entry (Dr Inventory / Cr AP).",
     parameters: {
       type: "object",
       properties: {
-        reference: { type: "string", description: "PO reference, e.g. PO-12345678." },
+        reference: { type: "string" },
         warehouse_code: { type: "string" },
         lines: {
           type: "array",
@@ -23,7 +24,6 @@ export const goodsReceiptTools = [
             },
             required: ["sku", "received_qty"],
           },
-          description: "Optional. Omit to receive all outstanding quantities.",
         },
         notes: { type: "string" },
       },
@@ -35,8 +35,8 @@ export const goodsReceiptTools = [
         [ctx.tenantId, args.reference],
       ))[0];
       if (!po) return { error: `PO ${args.reference} not found.` };
-      if (po.status === "RECEIVED") return { error: `PO ${args.reference} already fully received.` };
-      if (po.status === "CANCELLED") return { error: `PO ${args.reference} is cancelled.` };
+      if (po.status === "RECEIVED") return { error: `PO already fully received.` };
+      if (po.status === "CANCELLED") return { error: `PO cancelled.` };
 
       const wh = (await q<any>(
         `SELECT id, code FROM warehouses WHERE tenant_id=$1 AND code=$2`,
@@ -45,19 +45,19 @@ export const goodsReceiptTools = [
       if (!wh) return { error: `Warehouse ${args.warehouse_code} not found.` };
 
       const allLines = await q<any>(
-        `SELECT l.id, l.item_id, l.quantity, l.received_qty, i.sku
+        `SELECT l.id, l.item_id, l.quantity, l.received_qty, l.unit_price,
+                i.sku, i.cost_price
            FROM purchase_order_lines l JOIN items i ON i.id = l.item_id
           WHERE l.po_id = $1 ORDER BY l.id`,
         [po.id],
       );
-      if (!allLines.length) return { error: `PO ${args.reference} has no lines.` };
+      if (!allLines.length) return { error: `PO has no lines.` };
 
       const requested = new Map<string, number>();
       if (args.lines?.length) {
         for (const l of args.lines) requested.set(l.sku, Number(l.received_qty));
       }
 
-      // Build plan first, then commit atomically
       const plan: { line: any; qty: number }[] = [];
       for (const line of allLines) {
         const remaining = Number(line.quantity) - Number(line.received_qty);
@@ -66,14 +66,13 @@ export const goodsReceiptTools = [
         if (toReceive <= 0) continue;
         if (toReceive > remaining) {
           return {
-            error: `SKU ${line.sku}: cannot receive ${toReceive} — only ${remaining} outstanding on PO.`,
+            error: `SKU ${line.sku}: cannot receive ${toReceive} — only ${remaining} outstanding.`,
           };
         }
         plan.push({ line, qty: toReceive });
       }
-      if (!plan.length) return { error: "Nothing to receive — all lines are already complete." };
+      if (!plan.length) return { error: "Nothing to receive." };
 
-      // Create GRN header
       const grnRef = ref("GRN", 6);
       const grn = (await q<any>(
         `INSERT INTO goods_receipts (tenant_id, reference, po_id, warehouse_id, received_by, notes)
@@ -82,16 +81,14 @@ export const goodsReceiptTools = [
       ))[0];
 
       const events: any[] = [];
-      let totalReceived = 0;
+      const cascadeLines: any[] = [];
 
       for (const p of plan) {
-        // GRN line
         await q(
           `INSERT INTO goods_receipt_lines (grn_id, po_line_id, item_id, quantity)
            VALUES ($1,$2,$3,$4)`,
           [grn.id, p.line.id, p.line.item_id, p.qty],
         );
-        // Stock
         await q(
           `INSERT INTO stock (tenant_id, item_id, warehouse_id, quantity)
            VALUES ($1,$2,$3,$4)
@@ -99,18 +96,25 @@ export const goodsReceiptTools = [
            DO UPDATE SET quantity = stock.quantity + EXCLUDED.quantity`,
           [ctx.tenantId, p.line.item_id, wh.id, p.qty],
         );
-        // Movement (linked to GRN)
         await q(
-          `INSERT INTO stock_movements (tenant_id, item_id, to_warehouse_id, quantity, reason, reference, moved_by, grn_id)
+          `INSERT INTO stock_movements
+             (tenant_id, item_id, to_warehouse_id, quantity, reason, reference, moved_by, grn_id)
            VALUES ($1,$2,$3,$4,'PO_RECEIPT',$5,$6,$7)`,
           [ctx.tenantId, p.line.item_id, wh.id, p.qty, args.reference, ctx.userId, grn.id],
         );
-        // Line progress
         await q(
           `UPDATE purchase_order_lines SET received_qty = received_qty + $2 WHERE id=$1`,
           [p.line.id, p.qty],
         );
-        totalReceived += p.qty;
+
+        cascadeLines.push({
+          sku: p.line.sku,
+          item_id: p.line.item_id,
+          qty: p.qty,
+          unit_price: p.line.unit_price != null ? Number(p.line.unit_price) : null,
+          cost_price: Number(p.line.cost_price ?? 0),
+        });
+
         events.push({
           sku: p.line.sku,
           received_now: p.qty,
@@ -118,7 +122,6 @@ export const goodsReceiptTools = [
         });
       }
 
-      // Recompute PO status
       const stillOpen = (await q<any>(
         `SELECT COUNT(*) AS n FROM purchase_order_lines
           WHERE po_id=$1 AND received_qty < quantity`,
@@ -127,19 +130,43 @@ export const goodsReceiptTools = [
       const newStatus = Number(stillOpen.n) > 0 ? "PARTIALLY_RECEIVED" : "RECEIVED";
       await q(`UPDATE purchase_orders SET status=$2 WHERE id=$1`, [po.id, newStatus]);
 
+      // Cascade: DRAFT AP invoice + DRAFT JE
+      let cascade: any = { invoice_number: null, je_reference: null };
+      try {
+        cascade = await cascadeFromGRN(ctx, {
+          tenantId: ctx.tenantId,
+          grnId: grn.id,
+          grnReference: grn.reference,
+          poId: po.id,
+          poReference: args.reference,
+          warehouseId: wh.id,
+          lines: cascadeLines,
+          requestedBy: ctx.userId,
+        });
+      } catch (err: any) {
+        console.error("[grn] cascade failed:", err);
+      }
+
       await q(
-        `INSERT INTO audit_log (tenant_id, user_id, action, detail) VALUES ($1,$2,'grn.created',$3)`,
-        [ctx.tenantId, ctx.userId, { grn: grnRef, po: args.reference, warehouse: args.warehouse_code, lines: events }],
+        `INSERT INTO audit_log (tenant_id, user_id, action, detail)
+         VALUES ($1,$2,'grn.created',$3)`,
+        [ctx.tenantId, ctx.userId,
+         { grn: grn.reference, po: args.reference, warehouse: args.warehouse_code, lines: events, cascade }],
       );
+
+      const cascadeMsg = cascade.invoice_number
+        ? ` Auto-created DRAFT AP invoice ${cascade.invoice_number} and JE ${cascade.je_reference}.`
+        : "";
 
       return {
         status: "CREATED",
-        grn_reference: grnRef,
+        grn_reference: grn.reference,
         po_reference: args.reference,
         warehouse: args.warehouse_code,
         po_status: newStatus,
         lines: events,
-        message: `GRN ${grnRef} created. PO ${args.reference} is now ${newStatus}.`,
+        cascade,
+        message: `GRN ${grn.reference} created. PO is now ${newStatus}.${cascadeMsg}`,
       };
     },
   }),

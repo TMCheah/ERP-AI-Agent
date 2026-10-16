@@ -19,6 +19,7 @@ export const itemTools = [
         barcode: { type: "string" },
         opening_stock: { type: "number", description: "Optional. Requires warehouse_code." },
         warehouse_code: { type: "string", description: "Optional. Requires opening_stock." },
+        default_vendor_code: { type: "string", description: "Optional default vendor for this item." },
       },
       required: ["sku", "name"],
     },
@@ -41,6 +42,16 @@ export const itemTools = [
         if (dupBar.length) return { error: `Barcode ${args.barcode} already used by ${(dupBar[0] as any).sku}.` };
       }
 
+      let defaultVendorId: number | null = null;
+      if (args.default_vendor_code) {
+        const v = (await q<any>(
+          `SELECT id FROM vendors WHERE tenant_id=$1 AND code=$2 AND deleted_at IS NULL`,
+          [ctx.tenantId, args.default_vendor_code],
+        ))[0];
+        if (!v) return { error: `Vendor ${args.default_vendor_code} not found.` };
+        defaultVendorId = v.id;
+      }
+
       let whId: number | null = null;
       if (args.warehouse_code) {
         const wh = (await q<any>(
@@ -52,13 +63,15 @@ export const itemTools = [
       }
 
       const row = (await q<any>(
-        `INSERT INTO items (tenant_id, sku, name, category, unit, selling_price, cost_price, reorder_point, barcode)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-         RETURNING id, sku, name, category, unit, selling_price, cost_price, reorder_point, barcode`,
+        `INSERT INTO items (tenant_id, sku, name, category, unit, selling_price, cost_price,
+                            reorder_point, barcode, default_vendor_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         RETURNING id, sku, name, category, unit, selling_price, cost_price,
+                   reorder_point, barcode, default_vendor_id`,
         [
           ctx.tenantId, args.sku, args.name, args.category ?? null, args.unit ?? "EA",
           args.selling_price ?? 0, args.cost_price ?? 0, args.reorder_point ?? 0,
-          args.barcode ?? null,
+          args.barcode ?? null, defaultVendorId,
         ],
       ))[0];
 
@@ -87,7 +100,7 @@ export const itemTools = [
 
   tool({
     name: "update_item",
-    description: "Update an item's name, category, unit, prices, reorder point, or barcode. Identify by SKU.",
+    description: "Update an item's name, category, unit, prices, reorder point, barcode, or default vendor. Identify by SKU.",
     parameters: {
       type: "object",
       properties: {
@@ -99,10 +112,15 @@ export const itemTools = [
         cost_price: { type: "number" },
         reorder_point: { type: "integer" },
         barcode: { type: "string" },
+        default_vendor_code: {
+          type: "string",
+          description: "Set the default vendor by code. Pass empty string to clear it.",
+        },
       },
       required: ["sku"],
     },
     async handler(args, ctx) {
+      // Barcode duplicate check
       if (args.barcode) {
         const dup = await q(
           `SELECT sku FROM items WHERE tenant_id=$1 AND barcode=$2 AND sku <> $3`,
@@ -110,28 +128,64 @@ export const itemTools = [
         );
         if (dup.length) return { error: `Barcode already used by ${(dup[0] as any).sku}.` };
       }
+
+      // ───── Resolve default vendor ─────
+      // undefined  → don't touch the column
+      // "" (empty) → set to NULL
+      // "V-001"    → set to that vendor's id
+      let shouldUpdateVendor = false;
+      let defaultVendorId: number | null = null;
+
+      if (args.default_vendor_code !== undefined) {
+        shouldUpdateVendor = true;
+        if (args.default_vendor_code === "") {
+          defaultVendorId = null;
+        } else {
+          const v = (await q<any>(
+            `SELECT id FROM vendors WHERE tenant_id=$1 AND code=$2 AND deleted_at IS NULL`,
+            [ctx.tenantId, args.default_vendor_code],
+          ))[0];
+          if (!v) return { error: `Vendor ${args.default_vendor_code} not found.` };
+          defaultVendorId = v.id;
+        }
+      }
+
+      // ───── The UPDATE ─────
       const rows = await q<any>(
         `UPDATE items
-            SET name          = COALESCE($2, name),
-                category      = COALESCE($3, category),
-                unit          = COALESCE($4, unit),
-                selling_price = COALESCE($5, selling_price),
-                cost_price    = COALESCE($6, cost_price),
-                reorder_point = COALESCE($7, reorder_point),
-                barcode       = COALESCE($8, barcode)
-          WHERE tenant_id=$9 AND sku=$1 AND deleted_at IS NULL
-          RETURNING sku, name, category, unit, selling_price, cost_price, reorder_point, barcode`,
+            SET name              = COALESCE($2, name),
+                category          = COALESCE($3, category),
+                unit              = COALESCE($4, unit),
+                selling_price     = COALESCE($5, selling_price),
+                cost_price        = COALESCE($6, cost_price),
+                reorder_point     = COALESCE($7, reorder_point),
+                barcode           = COALESCE($8, barcode),
+                default_vendor_id = CASE WHEN $9::boolean THEN $10::bigint ELSE default_vendor_id END
+          WHERE tenant_id=$11 AND sku=$1 AND deleted_at IS NULL
+          RETURNING sku, name, category, unit, selling_price, cost_price,
+                    reorder_point, barcode, default_vendor_id`,
         [
-          args.sku, args.name ?? null, args.category ?? null, args.unit ?? null,
-          args.selling_price ?? null, args.cost_price ?? null, args.reorder_point ?? null,
-          args.barcode ?? null, ctx.tenantId,
+          args.sku,
+          args.name ?? null,
+          args.category ?? null,
+          args.unit ?? null,
+          args.selling_price ?? null,
+          args.cost_price ?? null,
+          args.reorder_point ?? null,
+          args.barcode ?? null,
+          shouldUpdateVendor,   // $9
+          defaultVendorId,      // $10
+          ctx.tenantId,         // $11
         ],
       );
+
       if (!rows.length) return { error: `Item ${args.sku} not found or already deactivated.` };
+
       await q(
         `INSERT INTO audit_log (tenant_id, user_id, action, detail) VALUES ($1,$2,'item.updated',$3)`,
         [ctx.tenantId, ctx.userId, { sku: args.sku }],
       );
+
       return { status: "UPDATED", item: rows[0] };
     },
   }),

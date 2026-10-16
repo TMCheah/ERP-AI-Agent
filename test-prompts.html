@@ -4,17 +4,99 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Test Prompt Checklist</title>
+  <style>
+    :root {
+      --fg: #1f2933;
+      --muted: #52606d;
+      --accent: #2b6cb0;
+      --border: #e4e7eb;
+      --bg-note: #f8fafc;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif;
+      color: var(--fg);
+      max-width: 860px;
+      margin: 2rem auto;
+      padding: 0 1.25rem 4rem;
+      line-height: 1.55;
+    }
+    h1 {
+      font-size: 1.9rem;
+      border-bottom: 3px solid var(--accent);
+      padding-bottom: 0.4rem;
+      margin-bottom: 0.5rem;
+    }
+    h2 {
+      font-size: 1.2rem;
+      color: var(--accent);
+      margin-top: 2rem;
+      margin-bottom: 0.6rem;
+      padding-bottom: 0.2rem;
+      border-bottom: 1px solid var(--border);
+    }
+    ul {
+      margin: 0.4rem 0 0.8rem 1.2rem;
+      padding-left: 0.6rem;
+    }
+    li {
+      margin: 0.25rem 0;
+    }
+    li > ul {
+      margin-top: 0.25rem;
+    }
+    blockquote {
+      background: var(--bg-note);
+      border-left: 4px solid var(--accent);
+      margin: 0.8rem 0;
+      padding: 0.6rem 0.9rem;
+      color: var(--muted);
+      border-radius: 0 4px 4px 0;
+    }
+    blockquote ul {
+      margin: 0.4rem 0 0.2rem 1.2rem;
+    }
+    code {
+      background: #eef2f7;
+      padding: 0.1rem 0.35rem;
+      border-radius: 3px;
+      font-size: 0.9em;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    }
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 0.8rem 1rem;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 0.88rem;
+    }
+    pre code {
+      background: transparent;
+      padding: 0;
+      color: inherit;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 1.5rem 0;
+    }
+  </style>
 </head>
 <body>
+
   <h1>Test Prompt Checklist</h1>
 
   <blockquote>
-    Replace placeholder IDs such as <code>PO-XXXX</code>, <code>PRUN-XXXX</code>,
-    <code>JOB-XXXX</code>, <code>RFQ-XXXX</code>, <code>CTR-XXXX</code>, and
-    <code>WO-XXXX</code> with actual IDs when running tests.
+    Replace placeholder IDs such as <code>PO-XXXX</code>, <code>GRN-XXXX</code>,
+    <code>RET-XXXXXX</code>, <code>BILL-XXXX</code>, <code>JE-XXXX</code>,
+    <code>PRUN-XXXX</code>, <code>JOB-XXXX</code>, <code>RFQ-XXXX</code>,
+    <code>CTR-XXXX</code>, and <code>WO-XXXX</code> with actual IDs when running tests.
   </blockquote>
 
-  <h2>READ</h2>
+  <hr>
+
+  <h2>1. READ</h2>
   <ul>
     <li>Show me all pens with selling price above $5 and more than 100 in stock.</li>
     <li>What items are below reorder point?</li>
@@ -28,7 +110,7 @@
     <li>List CRM leads in PROPOSAL stage.</li>
   </ul>
 
-  <h2>WRITE — Approval-gated</h2>
+  <h2>2. WRITE — Approval-gated</h2>
   <ul>
     <li>We need 500 units of SKU-1001 by 2026-11-01.</li>
     <li>Adjust SKU-1002 at WH-KUL down by 20.</li>
@@ -36,52 +118,52 @@
     <li>Request leave for sam@magent.test 2026-11-01 to 2026-11-05.</li>
   </ul>
 
-  <h2>WRITE — Immediate, admin</h2>
+  <h2>3. WRITE — Immediate, admin</h2>
   <ul>
     <li>Create employee Henry, henry@magent.test, HR Manager.</li>
     <li>Create a login for employee 4 with role APPROVER.</li>
     <li>Add a new HR, his name is Henry. Create an employee and a user.</li>
   </ul>
 
-  <h2>MULTI-TOOL</h2>
+  <h2>4. MULTI-TOOL</h2>
   <ul>
     <li>List all employees and all overdue invoices.</li>
   </ul>
 
-  <h2>Transfers</h2>
+  <h2>5. Transfers</h2>
   <ul>
     <li>Transfer 50 units of SKU-1002 from WH-KUL to WH-PEN.</li>
     <li>List stock movements for SKU-1001.</li>
   </ul>
 
-  <h2>Warehouse</h2>
+  <h2>6. Warehouse</h2>
   <ul>
     <li>Create warehouse WH-JB named Johor Bahru Hub.</li>
     <li>List all warehouses.</li>
   </ul>
 
-  <h2>Goods receipt</h2>
+  <h2>7. Goods Receipt</h2>
   <ul>
     <li>Create a PO for V-001 with 100 units of SKU-1001 at $2 each.</li>
     <li>List all purchase orders.</li>
     <li>Receive PO-XXXX into WH-KUL.</li>
   </ul>
 
-  <h2>Invoices</h2>
+  <h2>8. Invoices</h2>
   <ul>
     <li>Void invoice INV-1001 because the customer disputed it.</li>
     <li>Update invoice INV-1002 to $5,000.</li>
     <li>List journal entries.</li>
   </ul>
 
-  <h2>People</h2>
+  <h2>9. People</h2>
   <ul>
     <li>Change Sam Staff's department to Finance.</li>
     <li>Deactivate employee E-002.</li>
     <li>List leave requests.</li>
   </ul>
 
-  <h2>CRM</h2>
+  <h2>10. CRM</h2>
   <ul>
     <li>Update lead Rina Tan's value to $35,000.</li>
     <li>Convert lead Rina Tan to a customer.</li>
@@ -89,14 +171,14 @@
     <li>Close ticket T-1002.</li>
   </ul>
 
-  <h2>Manufacturing</h2>
+  <h2>11. Manufacturing</h2>
   <ul>
     <li>Complete work order WO-XXXX at WH-KUL.</li>
     <li>Show me the BOM for SKU-1001.</li>
     <li>Delete the BOM for SKU-1001 v1.</li>
   </ul>
 
-  <h2>Projects</h2>
+  <h2>12. Projects</h2>
   <ul>
     <li>Update project PRJ-001 status to ON_HOLD.</li>
     <li>List tasks for PRJ-001.</li>
@@ -104,7 +186,7 @@
     <li>Log 6 hours on PRJ-001 task "Design homepage".</li>
   </ul>
 
-  <h2>Reports</h2>
+  <h2>13. Reports</h2>
   <ul>
     <li>What is my total inventory valuation?</li>
     <li>Show me the AR aging report.</li>
@@ -114,14 +196,11 @@
     <li>Show me the sales pipeline.</li>
   </ul>
 
-  <h2>Purchase Orders</h2>
+  <h2>14. Purchase Orders</h2>
   <ul>
     <li>List purchase orders.</li>
-    <li>
-      Create a PO for V-001 with lines: 100x SKU-1001 at $2, 50x SKU-1002 at $2.
-      <ul>
-        <li>Note: Approve it in the Approvals tab.</li>
-      </ul>
+    <li>Create a PO for V-001 with lines: 100x SKU-1001 at $2, 50x SKU-1002 at $2.
+      <ul><li>Approve it in the Approvals tab.</li></ul>
     </li>
     <li>Get PO-XXXX.</li>
     <li>Receive 30 units of SKU-1001 from PO-XXXX into WH-KUL.</li>
@@ -130,7 +209,7 @@
     <li>Get PO-XXXX.</li>
   </ul>
 
-  <h2>Payroll</h2>
+  <h2>15. Payroll</h2>
   <ul>
     <li>Create payroll for 2026-10-01 to 2026-10-31.</li>
     <li>List payroll runs.</li>
@@ -138,7 +217,7 @@
     <li>Mark payroll PRUN-XXXX as paid.</li>
   </ul>
 
-  <h2>Fixed assets</h2>
+  <h2>16. Fixed Assets</h2>
   <ul>
     <li>List fixed assets.</li>
     <li>Register asset FA-100 'Forklift' cost $25,000 purchased today, life 60 months.</li>
@@ -147,7 +226,7 @@
     <li>Dispose FA-100 with proceeds $18,000.</li>
   </ul>
 
-  <h2>FX</h2>
+  <h2>17. FX</h2>
   <ul>
     <li>List FX rates.</li>
     <li>Convert 1000 USD to MYR.</li>
@@ -155,13 +234,13 @@
     <li>Convert 500 USD to JPY.</li>
   </ul>
 
-  <h2>Barcode</h2>
+  <h2>18. Barcode</h2>
   <ul>
     <li>Set barcode 'PKG-BLUE-001' for SKU-1001.</li>
     <li>Lookup barcode PKG-BLUE-001.</li>
   </ul>
 
-  <h2>Time &amp; attendance</h2>
+  <h2>19. Time &amp; Attendance</h2>
   <ul>
     <li>Clock in sam@magent.test.</li>
     <li>List time entries.</li>
@@ -169,7 +248,7 @@
     <li>Log 40 hours timesheet for sam@magent.test week of 2026-10-06.</li>
   </ul>
 
-  <h2>Hiring &amp; performance</h2>
+  <h2>20. Hiring &amp; Performance</h2>
   <ul>
     <li>Create job opening Senior Engineer, Engineering.</li>
     <li>List job openings.</li>
@@ -180,7 +259,7 @@
     <li>List performance reviews.</li>
   </ul>
 
-  <h2>Contracts &amp; RFQ</h2>
+  <h2>21. Contracts &amp; RFQ</h2>
   <ul>
     <li>Create contract with V-001 titled "Stationery Supply" value $50,000 starting 2026-11-01 ending 2027-11-01.</li>
     <li>List contracts.</li>
@@ -189,21 +268,17 @@
     <li>Submit quote from V-001 for RFQ-XXXX at $1.95, lead 14 days.</li>
     <li>Submit quote from V-002 for RFQ-XXXX at $2.10, lead 7 days.</li>
     <li>Compare quotes for RFQ-XXXX.</li>
-    <li>
-      Award RFQ-XXXX to V-001.
-      <ul>
-        <li>Expected: RFQ awarded → a purchase order approval is queued.</li>
-      </ul>
-    </li>
+    <li>Award RFQ-XXXX to V-001.</li>
   </ul>
+  <blockquote><strong>Expect:</strong> RFQ awarded → a purchase order approval is queued.</blockquote>
 
-  <h2>MRP + forecast</h2>
+  <h2>22. MRP + Forecast</h2>
   <ul>
     <li>Calculate MRP for SKU-1001, quantity 500.</li>
     <li>Forecast demand for SKU-1001 over 180 days.</li>
   </ul>
 
-  <h2>🆕 Item CRUD</h2>
+  <h2>23. Item CRUD</h2>
   <ul>
     <li>List all items.</li>
     <li>Create item SKU-9001 "Stapler HD-50" category Stationery at selling $15 cost $8 reorder 50.</li>
@@ -215,24 +290,22 @@
     <li>List items include_deactivated.</li>
     <li>Activate item SKU-9001.</li>
   </ul>
-  <blockquote>Expect: SKU-9001 appears/disappears from list_items as you toggle.</blockquote>
+  <blockquote><strong>Expect:</strong> SKU-9001 appears/disappears from list_items as you toggle.</blockquote>
 
-  <h2>🆕 Item with opening stock</h2>
+  <h2>24. Item with Opening Stock</h2>
   <ul>
     <li>Create item SKU-9002 "Sticky Notes 3x3" category Stationery with opening stock 500 at WH-KUL.</li>
     <li>Get item SKU-9002.</li>
     <li>List stock movements for SKU-9002.</li>
   </ul>
-  <blockquote>Expect: a movement with reason OPENING.</blockquote>
+  <blockquote><strong>Expect:</strong> a movement with reason OPENING.</blockquote>
 
-  <h2>🆕 Full procurement chain with GRN</h2>
+  <h2>25. Full Procurement Chain with GRN</h2>
   <ul>
     <li>Create item SKU-9100 "Cardboard Box L" category Packaging at cost $3.</li>
     <li>Create a PO for V-001 with lines: 200x SKU-9100 at $3, 100x SKU-1001 at $2.</li>
     <li>List purchase orders.
-      <ul>
-        <li>Note: Approve the PO in the Approvals tab.</li>
-      </ul>
+      <ul><li>Approve the PO in the Approvals tab.</li></ul>
     </li>
     <li>Receive 50 units of SKU-9100 from PO-XXXX into WH-KUL.</li>
     <li>List goods receipts.</li>
@@ -241,34 +314,32 @@
     <li>List stock movements for SKU-9100.</li>
   </ul>
   <blockquote>
-    Expect:
+    <strong>Expect:</strong>
     <ul>
       <li>A GRN reference like GRN-XXXXXX is returned.</li>
       <li>PO status becomes PARTIALLY_RECEIVED.</li>
-      <li>get PO shows received_qty: 50, outstanding: 150 on SKU-9100 and received_qty: 0, outstanding: 100 on SKU-1001.</li>
+      <li><code>get PO</code> shows received_qty: 50, outstanding: 150 on SKU-9100 and received_qty: 0, outstanding: 100 on SKU-1001.</li>
       <li>Stock movement for SKU-9100 has reason='PO_RECEIPT' and a grn_reference.</li>
     </ul>
   </blockquote>
 
-  <h2>🆕 Partial receive → full receive</h2>
+  <h2>26. Partial Receive → Full Receive</h2>
   <ul>
     <li>Receive the rest of PO-XXXX into WH-KUL.</li>
     <li>Get PO-XXXX.</li>
   </ul>
-  <blockquote>Expect: status → RECEIVED, received_qty == quantity on both lines.</blockquote>
+  <blockquote><strong>Expect:</strong> status → RECEIVED, received_qty == quantity on both lines.</blockquote>
 
-  <h2>🆕 Goods return</h2>
+  <h2>27. Goods Return</h2>
   <ul>
     <li>Create a goods return from GRN-XXXX: return 10x SKU-9100, reason "damaged in transit".
-      <ul>
-        <li>Note: Approve it.</li>
-      </ul>
+      <ul><li>Approve it.</li></ul>
     </li>
     <li>List goods returns.</li>
     <li>List stock movements for SKU-9100.</li>
   </ul>
   <blockquote>
-    Expect:
+    <strong>Expect:</strong>
     <ul>
       <li>A RET-XXXXXX reference appears.</li>
       <li>Stock for SKU-9100 drops by 10.</li>
@@ -276,12 +347,73 @@
     </ul>
   </blockquote>
 
-  <h2>🆕 Deactivated items excluded from inventory</h2>
+  <h2>28. Deactivated Items Excluded from Inventory</h2>
   <ul>
     <li>Deactivate item SKU-2001 reason "discontinued".</li>
     <li>Show me all items in stock.</li>
     <li>List items.</li>
   </ul>
-  <blockquote>Expect: SKU-2001 gone from query_inventory (default) but visible in list_items include_deactivated.</blockquote>
+  <blockquote><strong>Expect:</strong> SKU-2001 gone from query_inventory (default) but visible in list_items include_deactivated.</blockquote>
+
+  <h2>29. Drafts Page</h2>
+  <ul>
+    <li>Click Drafts in the sidebar → empty page (until you create something below).</li>
+    <li>Create a PR via chat: <code>We need 20 units of SKU-1001</code></li>
+    <li>Approve it in Approvals → a DRAFT PO is auto-created.</li>
+    <li>Refresh Drafts → the DRAFT PO card appears with a → procurement link.</li>
+  </ul>
+
+  <h2>30. Chain 1 — PR → DRAFT PO</h2>
+  <ul>
+    <li>Chat: <code>We need 30 units of SKU-1001</code></li>
+    <li>Approve in Approvals.</li>
+    <li>Procurement module → Draft tab → the DRAFT PO is there.</li>
+    <li>Its notes say <code>Auto-generated from PR-XXXX</code>.</li>
+  </ul>
+
+  <h2>31. Chain 2 + 3 — GRN → DRAFT AP Invoice + DRAFT JE</h2>
+  <ul>
+    <li>Create an OPEN PO via chat: <code>Create a PO for V-001 with 50 units of SKU-1001 at $2 each</code></li>
+    <li>Approve it.</li>
+    <li>Receive: <code>Receive 50 units of SKU-1001 from PO-XXXX into WH-KUL</code></li>
+  </ul>
+  <blockquote><strong>Expect:</strong> message includes <code>Auto-created DRAFT AP invoice BILL-XXXX</code> and <code>JE JE-XXXX</code>.</blockquote>
+  <ul>
+    <li>Financials → Draft tab → BILL and JE cards are there, both linked to the GRN reference.</li>
+    <li>Drafts page → same two cards, filterable by module finance.</li>
+  </ul>
+
+  <h2>32. Chain 4 — Work Order → DRAFT Production JE</h2>
+  <ul>
+    <li>Complete a work order: <code>Complete work order WO-XXXX at WH-KUL</code></li>
+    <li>Financials → Draft tab → a JE with source WORK_ORDER and Dr 1300 / Cr 2100.</li>
+  </ul>
+
+  <h2>33. Chain 5 — AR Invoice → DRAFT JE</h2>
+  <ul>
+    <li>Create an invoice: <code>Create an invoice for Globex Corp for $5000 due in 30 days</code></li>
+    <li>Approve it in Approvals.</li>
+    <li>Financials → the OPEN invoice appears in Pending.</li>
+    <li>And a DRAFT JE appears in Draft tab (Dr 1200 / Cr 4000).</li>
+  </ul>
+
+  <h2>34. Chain 6 — Leave → Calendar Event</h2>
+  <ul>
+    <li>Request leave: <code>Request leave for sam@acme.test from 2026-11-01 to 2026-11-05</code></li>
+    <li>Approve it.</li>
+    <li>Verify in the DB:</li>
+  </ul>
+  <pre><code>docker exec -it &lt;container&gt; psql -U erp -d erp -c \
+  "SELECT title, start_date, end_date, kind FROM calendar_events;"</code></pre>
+  <blockquote><strong>Expect:</strong> <code>Leave: Sam Staff | 2026-11-01 | 2026-11-05 | LEAVE</code></blockquote>
+
+  <h2>35. Chain 7 — Default Vendor</h2>
+  <ul>
+    <li>Set default vendor V-001 for SKU-1002.</li>
+    <li><code>We need 10 units of SKU-1002</code></li>
+    <li>Approve the PR.</li>
+    <li>Procurement → Draft → the DRAFT PO has vendor <code>Pilot Supplies Sdn Bhd (V-001)</code>.</li>
+  </ul>
+
 </body>
 </html>
