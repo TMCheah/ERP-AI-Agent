@@ -2,18 +2,20 @@
 import { useEffect, useState } from "react";
 
 const PROVIDER_DEFAULTS: Record<string, { base_url: string; model: string; hint: string }> = {
+  google:              { base_url: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-3.5-flash-lite", hint: "Google AI Studio key (starts with AIza…)." },
   ollama:              { base_url: "http://localhost:11434", model: "gemma4:12b",           hint: "Local Ollama. Model must support tools." },
   openai:              { base_url: "https://api.openai.com/v1", model: "gpt-4o-mini",       hint: "Requires API key." },
   openrouter:          { base_url: "https://openrouter.ai/api/v1", model: "anthropic/claude-3.5-sonnet", hint: "Access many models via one key." },
-  google:              { base_url: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemma-4-31b-it", hint: "Google AI Studio key." },
   "openai-compatible": { base_url: "http://localhost:8000/v1", model: "your-model",          hint: "Any OpenAI-compatible server." },
 };
 
+type TestResult = { ok: boolean; message: string; latency_ms?: number; tool_calling?: boolean | null };
+
 export default function SettingsPage() {
   const [form, setForm] = useState({
-    provider: "ollama",
-    base_url: "http://localhost:11434",
-    model: "gemma4:12b",
+    provider: "google",
+    base_url: "https://generativelanguage.googleapis.com/v1beta/openai",
+    model: "gemini-3.5-flash-lite",
     api_key: "",
     temperature: 0.1,
     is_demo_mode: false,
@@ -22,6 +24,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<TestResult | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -62,7 +66,7 @@ export default function SettingsPage() {
           is_demo_mode: true,
           provider: "google",
           base_url: "https://generativelanguage.googleapis.com/v1beta/openai",
-          model: "gemma-4-31b-it",
+          model: "gemini-3.5-flash-lite",
           api_key: "",
         };
       }
@@ -88,6 +92,28 @@ export default function SettingsPage() {
     setMsg("Saved. New chats use these settings.");
   }
 
+  async function runTest() {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await fetch("/api/settings/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const j = await res.json().catch(() => ({}));
+      setTestResult({
+        ok: Boolean(j.ok),
+        message: j.message ?? j.error ?? "Test failed",
+        latency_ms: j.latency_ms,
+        tool_calling: j.tool_calling,
+      });
+    } catch {
+      setTestResult({ ok: false, message: "Could not reach the server." });
+    }
+    setTesting(false);
+  }
+
   const hint = PROVIDER_DEFAULTS[form.provider]?.hint;
   const needsKey = form.provider !== "ollama";
   const isLocked = form.is_demo_mode;
@@ -110,7 +136,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between rounded-md border border-brand-600/30 bg-brand-600/10 px-4 py-3">
                 <div>
                   <p className="text-sm font-medium text-brand-500">Demo Mode</p>
-                  <p className="text-xs text-brand-500/70">Locks settings to Google AI Studio + Gemma.</p>
+                  <p className="text-xs text-brand-500/70">Locks settings to Google AI Studio + Gemini.</p>
                 </div>
                 <button
                   type="button"
@@ -202,9 +228,30 @@ export default function SettingsPage() {
                 <div className="rounded-md border border-red-800 bg-red-950/40 px-3 py-2 text-sm text-red-300">{error}</div>
               )}
 
-              <div className="pt-2">
+              {testResult && (
+                <div
+                  className={`rounded-md border px-3 py-2 text-sm ${
+                    !testResult.ok
+                      ? "border-red-800 bg-red-950/40 text-red-300"
+                      : testResult.tool_calling === false
+                        ? "border-amber-800 bg-amber-950/40 text-amber-300"
+                        : "border-emerald-800 bg-emerald-950/40 text-emerald-300"
+                  }`}
+                >
+                  {testResult.ok ? "✅ " : "❌ "}
+                  {testResult.message}
+                  {testResult.latency_ms != null && (
+                    <span className="ml-1 text-xs opacity-70">({testResult.latency_ms} ms)</span>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
                 <button className="btn btn-primary" onClick={save} disabled={saving}>
                   {saving ? "Saving…" : "Save settings"}
+                </button>
+                <button className="btn" onClick={runTest} disabled={testing}>
+                  {testing ? "Testing…" : "Test connection"}
                 </button>
               </div>
             </div>

@@ -7,6 +7,7 @@ import { runAgent, type AgentEvent } from "./agent.js";
 import { executeApproval } from "./approval-executor.js";
 import { getModuleCards } from "./modules.js";
 import { listAllDrafts } from "./drafts.js";
+import { testConnection, demoSettings, type LlmSettings } from "./llm.js";
 
 const app = express();
 app.use(cors());
@@ -249,9 +250,39 @@ app.put("/settings", async (req, res) => {
            temperature=EXCLUDED.temperature,
            is_demo_mode=EXCLUDED.is_demo_mode,
            updated_at=now()`,
-    [ctx.tenantId, provider, base_url, model, api_key ?? null, temperature ?? 0.1, is_demo_mode ?? false],
+    [ctx.tenantId, provider, base_url, model, api_key || null, temperature ?? 0.1, is_demo_mode ?? false],
   );
   res.json({ ok: true });
+});
+
+// ---------- Settings: connection test ----------
+app.post("/settings/test", chatLimiter, async (req, res) => {
+  const ctx = ctxFromHeaders(req);
+  if (!ctx) return res.status(400).json({ error: "Missing user context headers" });
+  if (ctx.role !== "ADMIN") return res.status(403).json({ error: "Admin only" });
+
+  const { provider, base_url, model, api_key, temperature, is_demo_mode } = req.body ?? {};
+  let settings: LlmSettings;
+  if (is_demo_mode) {
+    settings = demoSettings();
+  } else {
+    let key: string | null = api_key || null;
+    if (!key) {
+      // "Leave blank to keep existing": reuse the saved key, but only for the same provider
+      const saved = (await q<any>(
+        `SELECT provider, api_key FROM agent_settings WHERE tenant_id=$1`,
+        [ctx.tenantId],
+      ))[0];
+      if (saved?.provider === provider) key = saved.api_key ?? null;
+    }
+    settings = { provider, base_url, model, api_key: key, temperature: Number(temperature ?? 0.1) };
+  }
+
+  try {
+    res.json(await testConnection(settings));
+  } catch (err: any) {
+    res.status(500).json({ ok: false, message: err.message ?? "Test failed" });
+  }
 });
 
 app.get("/modules/:key/list", readLimiter, async (req, res) => {

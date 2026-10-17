@@ -1,4 +1,4 @@
-import { loadSettings, streamChat, type ChatMessage } from "./llm.js";
+import { loadSettings, resolveSettings, streamChat, friendlyModelError, type ChatMessage } from "./llm.js";
 import { SYSTEM_PROMPT } from "./prompt.js";
 import { toolMap, toolsForOllama } from "./tools/index.js";
 import { withRetry } from "./tools/helpers.js";
@@ -25,7 +25,12 @@ export async function* runAgent(
   userInput: string,
 ): AsyncGenerator<AgentEvent> {
   yield { type: "status", text: "Loading model…" };
-  const settings = await loadSettings(ctx.tenantId);
+  // Pick ONE provider for this whole request (Ollama -> Gemini fallback happens only here).
+  const resolved = await resolveSettings(await loadSettings(ctx.tenantId));
+  const settings = resolved.settings;
+  if (resolved.fellBack) {
+    yield { type: "thinking", text: `⚠ Ollama unavailable (${resolved.reason}). Using ${settings.model} for this request.` };
+  }
 
   const messages: ChatMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },
@@ -34,12 +39,13 @@ export async function* runAgent(
   ];
 
   let forcedRetry = false;
+  let usedAnyTool = false; // true once the model has called at least one tool in this request
 
   for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
     yield { type: "status", text: `Waiting for ${settings.model}…` };
 
     let assistantText = "";
-    let calls: { id: string; name: string; arguments: any }[] = [];
+    let calls: { id: string; name: string; arguments: any; extra_content?: any }[] = [];
     let firstToken = false;
 
     try {
@@ -56,7 +62,7 @@ export async function* runAgent(
         }
       }
     } catch (err: any) {
-      yield { type: "error", text: `Model call failed: ${err.message}` };
+      yield { type: "error", text: friendlyModelError(err, settings, (ctx as any).role) };
       yield { type: "done" };
       return;
     }
@@ -65,7 +71,7 @@ export async function* runAgent(
       // ---- HALLUCINATION GUARD ----
       // If the user asked a data-seeking question and the model produced an answer
       // WITHOUT calling a tool, force one retry with an explicit reminder.
-      if (!forcedRetry && DATA_SEEKING_RE.test(userInput) && assistantText.trim()) {
+      if (!forcedRetry && !usedAnyTool && DATA_SEEKING_RE.test(userInput) && assistantText.trim()) {
         forcedRetry = true;
         yield {
           type: "thinking",
@@ -87,6 +93,7 @@ export async function* runAgent(
       return;
     }
 
+    usedAnyTool = true;
     messages.push({
       role: "assistant",
       content: assistantText,
@@ -97,6 +104,8 @@ export async function* runAgent(
           name: c.name,
           arguments: JSON.stringify(c.arguments), // MUST be a string for OpenAI/Gemini
         },
+        // Gemini 3 thought signature: send back exactly as received (no-op for other providers)
+        ...(c.extra_content ? { extra_content: c.extra_content } : {}),
       })),
     });
 
