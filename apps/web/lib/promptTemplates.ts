@@ -11,6 +11,15 @@ export const MODULE_PROMPTS: Record<ModuleKey, { title: string; prompts: string[
       "What's the total value of my sales pipeline?",
     ],
   },
+  drafts: {
+    title: "Drafts",
+    prompts: [
+      "Show me all drafts",
+      "List draft purchase orders",
+      "What invoices are in draft?",
+      "Show me draft journal entries",
+    ],
+  },
   finance: {
     title: "Financials",
     prompts: [
