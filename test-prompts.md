@@ -66,7 +66,7 @@
 
 - Update lead Rina Tan's value to $35,000.
 - Convert lead Rina Tan to a customer.
-- Assign ticket T-1001 to staff@acme.test.
+- Assign ticket T-1001 to staff@magent.test.
 - Close ticket T-1002.
 
 ## 11. Manufacturing
@@ -270,7 +270,7 @@
 
 ## 34. Chain 6 — Leave → Calendar Event
 
-- Request leave: `Request leave for sam@acme.test from 2026-11-01 to 2026-11-05`
+- Request leave: `Request leave for sam@magent.test from 2026-11-01 to 2026-11-05`
 - Approve it.
 - Verify in the DB:
 

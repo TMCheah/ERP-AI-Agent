@@ -3,6 +3,7 @@ import { env } from "./env.js";
 export type ChatMessage = {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
+  tool_call_id?: string; // Required for role="tool"
   tool_calls?: any[];
 };
 
@@ -16,7 +17,7 @@ export type LlmSettings = {
 
 export type StreamChunk =
   | { type: "delta"; text: string }
-  | { type: "tool_calls"; calls: { name: string; arguments: any }[] }
+  | { type: "tool_calls"; calls: { id: string; name: string; arguments: any }[] }
   | { type: "done"; finish_reason?: string };
 
 export const PROVIDERS = {
@@ -29,15 +30,28 @@ export const PROVIDERS = {
 
 export type ProviderId = keyof typeof PROVIDERS;
 
-/** 10 minutes — models like Qwen 32B can take a while, and multi-step tool loops multiply it. */
+/** 10 minutes — local models like Gemma4:12b can take a while, and multi-step tool loops multiply it. */
 export const LLM_TIMEOUT_MS = 600_000;
 
 export async function loadSettings(tenantId: string): Promise<LlmSettings> {
   const { one } = await import("./db.js");
   const row = await one<any>(
-    `SELECT provider, base_url, model, api_key, temperature FROM agent_settings WHERE tenant_id = $1`,
+    `SELECT provider, base_url, model, api_key, temperature, is_demo_mode 
+       FROM agent_settings WHERE tenant_id = $1`,
     [tenantId],
   );
+
+  // ---- DEMO MODE OVERRIDE ----
+  if (row?.is_demo_mode) {
+    return {
+      provider: "google",
+      base_url: "https://generativelanguage.googleapis.com/v1beta/openai",
+      model: "gemma-4-31b-it", 
+      api_key: process.env.DEMO_MODE_API_KEY || "",
+      temperature: 0.1,
+    };
+  }
+
   if (!row) {
     return {
       provider: "ollama",
@@ -101,7 +115,7 @@ async function* streamOllama(
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buf = "";
-  const toolCalls: { name: string; arguments: any }[] = [];
+  const toolCalls: { id: string; name: string; arguments: any }[] = [];
 
   while (true) {
     const { value, done } = await reader.read();
@@ -117,6 +131,7 @@ async function* streamOllama(
       if (msg.content) yield { type: "delta", text: msg.content };
       for (const tc of msg.tool_calls ?? []) {
         toolCalls.push({
+          id: tc.id || `call_${Math.random().toString(36).slice(2, 8)}`,
           name: tc.function?.name,
           arguments:
             typeof tc.function?.arguments === "string"
@@ -162,7 +177,7 @@ async function* streamOpenAI(
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buf = "";
-  const accum: Record<number, { name: string; args: string }> = {};
+  const accum: Record<number, { id: string; name: string; args: string }> = {};
 
   while (true) {
     const { value, done } = await reader.read();
@@ -183,17 +198,20 @@ async function* streamOpenAI(
       }
       for (const tc of delta.tool_calls ?? []) {
         const i = tc.index ?? 0;
-        if (!accum[i]) accum[i] = { name: "", args: "" };
+        if (!accum[i]) accum[i] = { id: tc.id ?? "", name: "", args: "" };
+        if (tc.id) accum[i].id = tc.id; // Capture the ID (e.g. from Gemini)
         if (tc.function?.name) accum[i].name += tc.function.name;
         if (tc.function?.arguments) accum[i].args += tc.function.arguments;
       }
     }
   }
-  const calls = Object.values(accum)
+    const calls = Object.values(accum)
     .filter((c) => c.name)
-    .map((c) => ({ name: c.name, arguments: safeParse(c.args) }));
-  if (calls.length) yield { type: "tool_calls", calls };
-  yield { type: "done" };
+    .map((c) => ({
+      id: c.id || `call_${Math.random().toString(36).slice(2, 8)}`,
+      name: c.name,
+      arguments: safeParse(c.args),
+    }));
 }
 
 function safeParse(s: any) {

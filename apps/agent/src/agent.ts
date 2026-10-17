@@ -39,7 +39,7 @@ export async function* runAgent(
     yield { type: "status", text: `Waiting for ${settings.model}…` };
 
     let assistantText = "";
-    let calls: { name: string; arguments: any }[] = [];
+    let calls: { id: string; name: string; arguments: any }[] = [];
     let firstToken = false;
 
     try {
@@ -71,7 +71,7 @@ export async function* runAgent(
           type: "thinking",
           text: "⚠ Answered without querying the database. Forcing a retry.",
         };
-        messages.push({ role: "assistant", content: assistantText });
+        messages.push({ role: "assistant", content: assistantText.trim() || " " });
         messages.push({
           role: "system",
           content:
@@ -90,11 +90,18 @@ export async function* runAgent(
     messages.push({
       role: "assistant",
       content: assistantText,
-      tool_calls: calls.map((c) => ({ function: { name: c.name, arguments: c.arguments } })),
+      tool_calls: calls.map((c) => ({
+        id: c.id,
+        type: "function",
+        function: {
+          name: c.name,
+          arguments: JSON.stringify(c.arguments), // MUST be a string for OpenAI/Gemini
+        },
+      })),
     });
 
     for (const call of calls) {
-      const id = `${call.name}-${Math.random().toString(36).slice(2, 8)}`;
+      const id = call.id;
       yield { type: "thinking", text: `→ ${call.name}(${shortArgs(call.arguments)})` };
       yield { type: "tool_call", id, name: call.name, args: call.arguments };
 
@@ -104,14 +111,19 @@ export async function* runAgent(
         result = { error: `Unknown tool: ${call.name}` };
       } else {
         try {
-          // Retry transient DB errors only — most tools are idempotent enough
           result = await withRetry(() => t.handler(call.arguments, ctx), 3, 200);
         } catch (err: any) {
           result = { error: err.message ?? String(err) };
         }
       }
       yield { type: "tool_result", id, name: call.name, result };
-      messages.push({ role: "tool", content: JSON.stringify(result).slice(0, 20000) });
+      
+      // The tool response must include the ID
+      messages.push({ 
+        role: "tool", 
+        tool_call_id: call.id, 
+        content: JSON.stringify(result).slice(0, 20000) 
+      });
     }
 
     yield { type: "status", text: "Thinking about results…" };

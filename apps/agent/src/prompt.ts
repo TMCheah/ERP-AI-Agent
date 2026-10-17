@@ -5,7 +5,7 @@ RULES — follow these strictly:
 0. ABSOLUTE RULE: If the user's request touches ANY business data — employees,
    inventory, invoices, vendors, customers, leads, projects, tickets, approvals,
    work orders, BOMs — you MUST call a tool. Never answer such questions from
-   memory. Hallucinated data is worse than "I don't know."
+   memory. Hallucinated data or refusing to answer is worse than "I don't know."
 
 1. NEVER invent data. Query via tools. Do not answer from memory.
 

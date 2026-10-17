@@ -14,31 +14,35 @@ export default function ChatPane() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
-  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [conversationId, setConversationId] = useState<number | null>(null);
+  
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load history on mount
+  // Start a fresh chat on mount (ensures chat is clear on login/reload)
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/chat/history");
-        if (res.ok) {
-          const j = await res.json();
-          if (Array.isArray(j.messages)) {
-            setItems(
-              j.messages.map((m: any) => ({
-                id: crypto.randomUUID(),
-                kind: m.role === "user" ? "user" : "assistant",
-                text: m.content,
-              })),
-            );
-          }
-        }
-      } catch {}
-      setHistoryLoaded(true);
-    })();
+    startNewChat();
   }, []);
+
+  async function startNewChat() {
+    setItems([]);
+    setStatus(null);
+    setInput("");
+    
+    try {
+      const res = await fetch("/api/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "New chat" }),
+      });
+      if (res.ok) {
+        const j = await res.json();
+        setConversationId(j.conversation.id);
+      }
+    } catch (err) {
+      console.error("Failed to create conversation", err);
+    }
+  }
 
   // Auto-scroll
   useEffect(() => {
@@ -51,87 +55,87 @@ export default function ChatPane() {
   }
 
   async function send() {
-  const text = input.trim();
-  if (!text || busy) return;
-  setInput("");
-  setBusy(true);
-  setStatus("Sending…");
+    const text = input.trim();
+    if (!text || busy || !conversationId) return;
+    
+    setInput("");
+    setBusy(true);
+    setStatus("Sending…");
 
-  setItems((p) => [...p, { id: crypto.randomUUID(), kind: "user", text }]);
+    setItems((p) => [...p, { id: crypto.randomUUID(), kind: "user", text }]);
 
-  const res = await fetch("/api/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: text }),
-  });
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text, conversation_id: conversationId }),
+    });
 
-  if (!res.ok || !res.body) {
-    setItems((p) => [...p, { id: crypto.randomUUID(), kind: "error", text: `Request failed (${res.status})` }]);
-    setBusy(false); setStatus(null);
-    return;
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buf = "";
-
-  let thinkingId: string | null = null;
-  let thinkingLines: string[] = [];
-
-  const flushThinking = () => {
-    if (thinkingLines.length) {
-      if (!thinkingId) thinkingId = crypto.randomUUID();
-      const id = thinkingId;
-      const lines = [...thinkingLines];
-      setItems((p) =>
-        p.some((x) => x.id === id)
-          ? p.map((x) => (x.id === id ? ({ ...x, lines } as any) : x))
-          : [...p, { id, kind: "thinking", lines }],
-      );
+    if (!res.ok || !res.body) {
+      setItems((p) => [...p, { id: crypto.randomUUID(), kind: "error", text: `Request failed (${res.status})` }]);
+      setBusy(false); setStatus(null);
+      return;
     }
-  };
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    const parts = buf.split("\n\n");
-    buf = parts.pop() ?? "";
-    for (const part of parts) {
-      const line = part.split("\n").find((l) => l.startsWith("data:"));
-      if (!line) continue;
-      let evt: any;
-      try { evt = JSON.parse(line.slice(5).trim()); } catch { continue; }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
 
-      if (evt.type === "status") {
-        setStatus(evt.text);
-      } else if (evt.type === "thinking") {
-        setStatus(null);
-        thinkingLines.push(evt.text);
-        flushThinking();
-      } else if (evt.type === "delta") {
-        // Tokens are arriving — show a lightweight status, but don't render them.
-        setStatus("Writing…");
-      } else if (evt.type === "tool_call") {
-        setStatus(null);
-        setItems((p) => [...p, { id: evt.id, kind: "tool", name: evt.name, args: evt.args, done: false }]);
-      } else if (evt.type === "tool_result") {
-        setItems((p) => p.map((x) => x.id === evt.id ? ({ ...x, result: evt.result, done: true } as any) : x));
-      } else if (evt.type === "message") {
-        setStatus(null);
-        setItems((p) => [...p, { id: crypto.randomUUID(), kind: "assistant", text: evt.text }]);
-      } else if (evt.type === "error") {
-        setStatus(null);
-        setItems((p) => [...p, { id: crypto.randomUUID(), kind: "error", text: evt.text }]);
-      } else if (evt.type === "done") {
-        setStatus(null);
+    let thinkingId: string | null = null;
+    let thinkingLines: string[] = [];
+
+    const flushThinking = () => {
+      if (thinkingLines.length) {
+        if (!thinkingId) thinkingId = crypto.randomUUID();
+        const id = thinkingId;
+        const lines = [...thinkingLines];
+        setItems((p) =>
+          p.some((x) => x.id === id)
+            ? p.map((x) => (x.id === id ? ({ ...x, lines } as any) : x))
+            : [...p, { id, kind: "thinking", lines }],
+        );
+      }
+    };
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const parts = buf.split("\n\n");
+      buf = parts.pop() ?? "";
+      for (const part of parts) {
+        const line = part.split("\n").find((l) => l.startsWith("data:"));
+        if (!line) continue;
+        let evt: any;
+        try { evt = JSON.parse(line.slice(5).trim()); } catch { continue; }
+
+        if (evt.type === "status") {
+          setStatus(evt.text);
+        } else if (evt.type === "thinking") {
+          setStatus(null);
+          thinkingLines.push(evt.text);
+          flushThinking();
+        } else if (evt.type === "delta") {
+          setStatus("Writing…");
+        } else if (evt.type === "tool_call") {
+          setStatus(null);
+          setItems((p) => [...p, { id: evt.id, kind: "tool", name: evt.name, args: evt.args, done: false }]);
+        } else if (evt.type === "tool_result") {
+          setItems((p) => p.map((x) => x.id === evt.id ? ({ ...x, result: evt.result, done: true } as any) : x));
+        } else if (evt.type === "message") {
+          setStatus(null);
+          setItems((p) => [...p, { id: crypto.randomUUID(), kind: "assistant", text: evt.text }]);
+        } else if (evt.type === "error") {
+          setStatus(null);
+          setItems((p) => [...p, { id: crypto.randomUUID(), kind: "error", text: evt.text }]);
+        } else if (evt.type === "done") {
+          setStatus(null);
+        }
       }
     }
-  }
 
-  setBusy(false);
-  setStatus(null);
-}
+    setBusy(false);
+    setStatus(null);
+  }
 
   function onKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -141,7 +145,7 @@ export default function ChatPane() {
   }
 
   const suggestions = MODULE_PROMPTS[module] ?? MODULE_PROMPTS.chat;
-  const showBigSuggestions = historyLoaded && items.length === 0;
+  const showBigSuggestions = items.length === 0;
 
   return (
     <div className="flex h-full flex-col">
@@ -156,9 +160,17 @@ export default function ChatPane() {
               : `Quick prompts for ${suggestions.title}. Click one to edit, or type your own.`}
           </p>
         </div>
-        <div className="flex items-center gap-2 text-[11px] text-slate-500">
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={startNewChat} 
+            className="btn btn-ghost text-xs px-2.5 py-1 text-slate-400 hover:text-red-400 transition-colors"
+            title="Clear chat and start over"
+          >
+            🗑️ Clear
+          </button>
+          
           {status && (
-            <span className="flex items-center gap-1.5">
+            <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500" />
               {status}
             </span>
@@ -196,9 +208,9 @@ export default function ChatPane() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKey}
-              disabled={busy}
+              disabled={busy || !conversationId}
             />
-            <button className="btn btn-primary h-[44px] px-5" onClick={send} disabled={busy || !input.trim()}>
+            <button className="btn btn-primary h-[44px] px-5" onClick={send} disabled={busy || !input.trim() || !conversationId}>
               {busy ? "…" : "Send"}
             </button>
           </div>

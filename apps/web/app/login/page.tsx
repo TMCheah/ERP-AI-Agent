@@ -20,18 +20,30 @@ function LoginForm() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
-    setLoading(false);
+    
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
       setError(j.error ?? "Login failed");
+      setLoading(false);
       return;
     }
+    
+    // Keep loading=true so the overlay stays visible during Next.js routing
     router.push(next);
     router.refresh();
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-ink-950 px-4">
+    <div className="relative flex min-h-screen items-center justify-center bg-ink-950 px-4">
+      
+      {/* Loading Overlay */}
+      {loading && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-ink-950/80 backdrop-blur-sm transition-opacity">
+          <div className="mb-4 h-10 w-10 animate-spin rounded-full border-4 border-ink-700 border-t-brand-500"></div>
+          <p className="text-sm font-medium text-slate-300">Signing in…</p>
+        </div>
+      )}
+
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-600 text-xl font-bold text-white">
@@ -51,6 +63,7 @@ function LoginForm() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              disabled={loading}
               autoFocus
             />
           </div>
@@ -62,6 +75,7 @@ function LoginForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              disabled={loading}
             />
           </div>
           {error && (

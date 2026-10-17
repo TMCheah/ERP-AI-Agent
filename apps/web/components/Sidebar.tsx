@@ -29,7 +29,7 @@ export default function Sidebar({ session }: { session: Session }) {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">E</div>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-slate-100">
-              {process.env.NEXT_PUBLIC_APP_NAME ?? "Acme ERP"}
+              {process.env.NEXT_PUBLIC_APP_NAME ?? "Magent ERP"}
             </p>
             <p className="truncate text-[11px] text-slate-500">Natural-language</p>
           </div>

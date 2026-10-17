@@ -552,6 +552,7 @@ ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAUL
 ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS source TEXT;      -- AR_INVOICE | GRN | WORK_ORDER
 ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS source_ref TEXT;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS default_vendor_id BIGINT REFERENCES vendors(id);
+ALTER TABLE agent_settings ADD COLUMN IF NOT EXISTS is_demo_mode BOOLEAN NOT NULL DEFAULT false;
 
 CREATE INDEX idx_items_tenant ON items(tenant_id);
 CREATE INDEX idx_stock_item ON stock(item_id);
