@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 const PROVIDER_DEFAULTS: Record<string, { base_url: string; model: string; hint: string }> = {
   google:              { base_url: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-3.5-flash-lite", hint: "Google AI Studio key (starts with AIza…)." },
   ollama:              { base_url: "http://localhost:11434", model: "gemma4:12b",           hint: "Local Ollama. Model must support tools." },
-  openai:              { base_url: "https://api.openai.com/v1", model: "gpt-4o-mini",       hint: "Requires API key." },
-  openrouter:          { base_url: "https://openrouter.ai/api/v1", model: "anthropic/claude-3.5-sonnet", hint: "Access many models via one key." },
-  "openai-compatible": { base_url: "http://localhost:8000/v1", model: "your-model",          hint: "Any OpenAI-compatible server." },
+  //openai:              { base_url: "https://api.openai.com/v1", model: "gpt-4o-mini",       hint: "Requires API key." },
+  //openrouter:          { base_url: "https://openrouter.ai/api/v1", model: "anthropic/claude-3.5-sonnet", hint: "Access many models via one key." },
+  //"openai-compatible": { base_url: "http://localhost:8000/v1", model: "your-model",          hint: "Any OpenAI-compatible server." },
 };
 
 type TestResult = { ok: boolean; message: string; latency_ms?: number; tool_calling?: boolean | null };
